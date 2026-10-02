@@ -204,8 +204,9 @@ export class RecorderAPI {
 
     return response[0].slice(0, limit).map((item) => {
       const [id, title, createdTimestamp, durationTimestamp, , , location, , , , , , , webId] = item;
-      const createdMs = parseInt(createdTimestamp[0]) * 1000 + Math.floor(createdTimestamp[1] / 1000000);
-      const durationMs = parseInt(durationTimestamp[0]) * 1000 + Math.floor(durationTimestamp[1] / 1000000);
+      const toMs = (ts: any) => (parseInt(ts?.[0] ?? '0') || 0) * 1000 + Math.floor((Number(ts?.[1]) || 0) / 1000000);
+      const createdMs = toMs(createdTimestamp);
+      const durationMs = toMs(durationTimestamp);
 
       return {
         id: (webId as string) || id,
@@ -252,39 +253,34 @@ export class RecorderAPI {
         continue;
       }
 
-      const [rawWords, speakerId] = segment;
+      const [rawWords] = segment;
       const words = Array.isArray(rawWords)
         ? rawWords.filter((word) => Array.isArray(word))
         : [];
 
-      if (words.length === 0) {
-        continue;
-      }
-
-      if (speakerId !== currentSpeaker && currentText) {
-        segments.push({
-          speaker: `Speaker ${currentSpeaker + 1}`,
-          text: currentText.trim(),
-          startTime: currentStartTime,
-        });
-        currentText = '';
-      }
-
-      if (speakerId !== currentSpeaker) {
-        currentSpeaker = speakerId;
-        currentStartTime = words[0] ? formatTime(parseInt(words[0][2])) : '00:00';
-      }
-
       for (const word of words) {
+        const tagged = Array.isArray(word[6]) ? Number(word[6][1]) : 0;
+        const speakerId = tagged || (currentSpeaker > 0 ? currentSpeaker : 1);
+        if (speakerId !== currentSpeaker) {
+          if (currentText) {
+            segments.push({
+              speaker: `Speaker ${currentSpeaker}`,
+              text: currentText.trim(),
+              startTime: currentStartTime,
+            });
+            currentText = '';
+          }
+          currentSpeaker = speakerId;
+          currentStartTime = formatTime(parseInt(word[2]));
+        }
         const [text, formatted] = word;
-        const wordText = formatted || text;
-        currentText += wordText + ' ';
+        currentText += (formatted || text) + ' ';
       }
     }
 
     if (currentText) {
       segments.push({
-        speaker: `Speaker ${currentSpeaker + 1}`,
+        speaker: `Speaker ${currentSpeaker}`,
         text: currentText.trim(),
         startTime: currentStartTime,
       });
